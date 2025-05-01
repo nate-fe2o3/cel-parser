@@ -1,0 +1,7 @@
+[package]
+name = "newpar"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cel-rs = { path = "../cel-rs" }
