@@ -1,4 +1,4 @@
-use std::{cell::LazyCell, collections::HashMap, ops::Add};
+use std::{any::TypeId, cell::LazyCell, collections::HashMap, ops::Add};
 
 use cel_rs::{
     segment::Segment,
@@ -24,6 +24,20 @@ const FUNCS: HM = LazyCell::new(|| {
     hm
 });
 
-trait FunctionMappable {}
+trait FunctionMappable {
+    fn args_type(&self) -> TypeId;
+}
 
-impl<Args: IntoList + 'static, Stack: List + 'static> FunctionMappable for Segment<Args, Stack> {}
+impl<Args: IntoList + 'static, Stack: List + 'static> FunctionMappable for Segment<Args, Stack> {
+    fn args_type(&self) -> TypeId {
+        TypeId::of::<Args>()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic() {}
+}
