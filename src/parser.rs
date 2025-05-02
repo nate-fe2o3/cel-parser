@@ -49,7 +49,6 @@ impl<T: Iterator<Item = &'static str>> Parser<T> {
             "+" => {
                 println!("plus found");
                 self.input.next().unwrap();
-                // self.literal();
                 self.term();
                 self.stack
                     .op2(|x: i64, y: i64| x + y)
@@ -58,8 +57,6 @@ impl<T: Iterator<Item = &'static str>> Parser<T> {
             }
             "-" => {
                 self.input.next().unwrap();
-                // self.literal();
-                // self.expression();
                 self.term();
                 self.stack
                     .op2(|x: i64, y: i64| x - y)
@@ -86,7 +83,6 @@ impl<T: Iterator<Item = &'static str>> Parser<T> {
             "*" => {
                 println!("mult found");
                 self.input.next().unwrap();
-                // self.literal();
                 self.exponent();
                 self.stack
                     .op2(|x: i64, y: i64| x * y)
@@ -95,7 +91,6 @@ impl<T: Iterator<Item = &'static str>> Parser<T> {
             }
             "/" => {
                 self.input.next().unwrap();
-                // self.literal();
                 self.exponent();
                 self.stack
                     .op2(|x: i64, y: i64| x / y)
