@@ -22,132 +22,75 @@ impl<T: Iterator<Item = &'static str>> Parser<T> {
     }
 
     pub fn run(&mut self) {
-        self.expression();
+        self.parse(0);
     }
 
-    fn expression(&mut self) {
-        self.term();
-        self.more_expr();
+    fn parse(&mut self, prec: u8) {
+        if prec < 2 {
+            self.parse(prec + 1);
+        } else {
+            self.literal();
+        }
+        self.rhs(prec);
     }
-
-    fn more_expr(&mut self) {
+    fn rhs(&mut self, prec: u8) {
         let Some(chunk) = self.input.peek().to_owned() else {
             return;
         };
-        match *chunk {
-            "+" => {
+        match (prec, *chunk) {
+            (0, "+") => {
                 println!("plus found");
                 self.input.next().unwrap();
-                self.term();
+                self.parse(prec + 1);
+                // self.term();
                 self.stack
                     .op2(|x: i64, y: i64| x + y)
                     .expect("addition to work");
-                self.more_expr();
+                self.rhs(prec);
             }
-            "-" => {
+            (0, "-") => {
                 self.input.next().unwrap();
-                self.term();
+                self.parse(prec + 1);
+                // self.term();
                 self.stack
                     .op2(|x: i64, y: i64| x - y)
                     .expect("subtraction to work");
-                self.more_expr();
+                self.rhs(prec);
             }
-            ")" => {
+            (0, ")") => {
                 self.input.next().unwrap();
             }
-            _ => {}
-        };
-    }
-
-    fn term(&mut self) {
-        self.exponent();
-        self.more_term();
-    }
-
-    fn more_term(&mut self) {
-        let Some(chunk) = self.input.peek().to_owned() else {
-            return;
-        };
-        match *chunk {
-            "*" => {
+            (1, "*") => {
                 println!("mult found");
                 self.input.next().unwrap();
-                self.exponent();
+                // self.exponent();
+                self.parse(prec + 1);
                 self.stack
                     .op2(|x: i64, y: i64| x * y)
                     .expect("mult to work");
-                self.more_term();
+                self.rhs(prec);
             }
-            "/" => {
+            (1, "/") => {
                 self.input.next().unwrap();
-                self.exponent();
+                // self.exponent();
+                self.parse(prec + 1);
                 self.stack
                     .op2(|x: i64, y: i64| x / y)
                     .expect("mult to work");
-                self.more_term();
+                self.rhs(prec);
+            }
+            (2, "^") => {
+                self.input.next().unwrap();
+                self.literal();
+                // recurse first, nested exponents eval from right to left
+                self.rhs(prec);
+                self.stack
+                    .op2(|x: i64, y: i64| x.pow(y as u32))
+                    .expect("exponent to work");
             }
             _ => {}
         };
     }
-
-    fn exponent(&mut self) {
-        self.literal();
-        self.more_exponent();
-    }
-
-    fn more_exponent(&mut self) {
-        let Some(chunk) = self.input.peek().to_owned() else {
-            return;
-        };
-        if *chunk == "^" {
-            self.input.next().unwrap();
-            self.literal();
-            // recurse first, nested exponents eval from right to left
-            self.more_exponent();
-            self.stack
-                .op2(|x: i64, y: i64| x.pow(y as u32))
-                .expect("exponent to work");
-        };
-    }
-
-    // fn parse_rhs<Args: IntoList + 'static, Stack: List + 'static, R: 'static>(
-    //     &mut self,
-    //     precedence: u8,
-    //     stack: Segment<Args, (R, Stack)>,
-    // ) -> Segment<Args, (R, Stack)> {
-    //     let Some(thing) = self.input.peek() else {
-    //         return stack;
-    //     };
-    //     let token = thing.to_owned();
-    //     println!("token: {token}\nprecedence: {precedence}");
-    //     match (precedence, token) {
-    //         // add or subtract
-    //         (0, "+") | (0, "-") | (1, "*") | (1, "/") | (2, "^") => {
-    //             let functions = FUNCS;
-    //             let op = functions.get(token).unwrap();
-    //             self.input.next();
-    //             if precedence == 2 {
-    //                 // recursive call runs before power calculation, exponents are evaluated right to left
-    //                 // replace with prec + 1 when parse function fixed
-    //                 let stack = self.parse(precedence, stack);
-    //                 stack.op2(op.clone())
-    //             } else {
-    //                 let stack = stack.op2(op.clone());
-    //                 self.parse(precedence, stack)
-    //             }
-    //         }
-    //         (0, ")") => {
-    //             self.input.next();
-    //             stack
-    //         }
-    //         (0, _) => panic!(),
-    //
-    //         _ => {
-    //             println!("doing nothing");
-    //             stack
-    //         }
-    //     }
-    // }
 
     fn literal(&mut self) {
         // let functions = FUNCS;
@@ -168,11 +111,12 @@ impl<T: Iterator<Item = &'static str>> Parser<T> {
             "(" => {
                 println!("start paren found in number check");
                 self.input.next();
-                self.expression();
+                self.parse(0);
             }
             _ => panic!(),
         }
     }
+
     // fn arglist(&mut self) {
     //     self.parse(0);
     //     self.arg_prime();
