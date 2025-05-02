@@ -1,3 +1,4 @@
+use crate::builtins::*;
 use std::{any::TypeId, cell::LazyCell, collections::HashMap, iter::Peekable};
 
 use cel_rs::{
@@ -5,18 +6,6 @@ use cel_rs::{
     segment::{Callable, Segment},
     type_list::{IntoList, List},
 };
-
-type HM = LazyCell<HashMap<&'static str, fn(usize, usize) -> usize>>;
-
-// const FUNCS: HM = LazyCell::new(|| {
-//     let mut hm: HashMap<&'static str, fn(usize, usize) -> const R: usize> = HashMap::new();
-//     hm.insert("+", |x, y| x + y);
-//     hm.insert("*", |x, y| x * y);
-//     hm.insert("-", |x, y| x - y);
-//     hm.insert("/", |x, y| x / y);
-//     hm.insert("^", |x, y| x.pow(y as u32));
-//     hm
-// });
 
 pub struct Parser<T: Iterator<Item = &'static str>> {
     input: Peekable<T>,
