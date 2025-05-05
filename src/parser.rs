@@ -1,11 +1,6 @@
-use crate::builtins::*;
-use std::{any::TypeId, cell::LazyCell, collections::HashMap, iter::Peekable};
+use std::iter::Peekable;
 
-use cel_rs::{
-    dyn_segment::DynSegment,
-    segment::{Callable, Segment},
-    type_list::{IntoList, List},
-};
+use cel_rs::dyn_segment::DynSegment;
 
 pub struct Parser<T: Iterator<Item = &'static str>> {
     input: Peekable<T>,
