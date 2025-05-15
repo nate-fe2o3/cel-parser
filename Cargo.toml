@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 cel-rs = { path = "../cel-rs" }
+nom = "8.0.0"
