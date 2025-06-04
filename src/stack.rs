@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default, mem::Discriminant};
+use std::{collections::HashMap, default, mem::Discriminant, ops::Shl};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -12,6 +12,12 @@ pub enum Value {
 impl From<f64> for Value {
     fn from(value: f64) -> Self {
         Value::Num(value)
+    }
+}
+
+impl From<u64> for Value {
+    fn from(value: u64) -> Self {
+        Value::Num(value as f64)
     }
 }
 
@@ -158,22 +164,26 @@ impl Seg {
         self.register1("neg", neg);
 
         self.register2("add", add);
-        self.register2("mul", mul);
+        self.register2("mult", mul);
         self.register2("sub", sub);
         self.register2("div", div);
         self.register2("mod", modd);
 
         self.register2("lt", lt);
         self.register2("lte", lte);
-
         self.register2("gt", gt);
         self.register2("gte", gte);
-
         self.register2("eq", eq);
         self.register2("neq", neq);
-
         self.register2("and", and);
         self.register2("or", or);
+
+        self.register1("bitnot", bitnot);
+        self.register2("bitand", bitand);
+        self.register2("bitor", bitor);
+        self.register2("bitxor", bitxor);
+        self.register2("lshift", lshift);
+        self.register2("rshift", rshift);
     }
     pub fn push(&mut self, x: Value) {
         self.stack.push(x);
@@ -260,13 +270,15 @@ binary_fn!(gt, (Num, Num, |a, b| a > b));
 binary_fn!(gte, (Num, Num, |a, b| a >= b));
 binary_fn!(or, (Boolean, Boolean, |a, b| a || b));
 binary_fn!(and, (Boolean, Boolean, |a, b| a && b));
-// f64 issues
-// binary_fn!(bitand, (Num, Num, |a, b| a & b));
-// unary_fn!(bitnot, (Num |a | !a));
-// binary_fn!(bitor, (Num, Num, |a, b| a ` b));
-// binary_fn!(bitxor, (Num, Num, |a, b| a ^ b));
-// binary_fn!(lshift, (Num, Num, |a, b| a << b));
-// binary_fn!(rshift, (Num, Num, |a, b| a >> b));
+
+// f64 lossy
+binary_fn!(bitand, (Num, Num, |a, b| (a as u64 & b as u64) as f64));
+unary_fn!(bitnot, (Num, |a| !(a as u64)));
+binary_fn!(bitxor, (Num, Num, |a, b| a as u64 ^ b as u64));
+binary_fn!(bitor, (Num, Num, |a, b| a as u64 | b as u64));
+binary_fn!(lshift, (Num, Num, |a, b| (a as u64) << (b as u64)));
+binary_fn!(rshift, (Num, Num, |a, b| (a as u64) >> (b as u64)));
+
 binary_fn!(
     eq,
     (Num, Num, |a, b| a == b),

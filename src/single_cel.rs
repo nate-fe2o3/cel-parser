@@ -297,6 +297,7 @@ impl Parser {
             // if current_op == Token::Plus || current_op == Token::Minus {
             match current_op {
                 Token::Plus => {
+                    println!("add found");
                     self.next()?;
                     self.parse_multiplicative_expression()?;
                     self.seg.callfn("add".into(), 2);
@@ -323,6 +324,7 @@ impl Parser {
             let current_op = self.peek()?.value;
             match current_op {
                 Token::Multiply => {
+                    println!("multiply found");
                     self.next()?;
                     self.parse_unary_expression()?;
                     self.seg.callfn("mult".into(), 2);
@@ -655,30 +657,33 @@ mod tests {
     use super::*;
 
     // Helper to run lexer and parser for tests
-    fn parse_str(input: &str) -> Parser {
+    fn parse_str(input: &str) -> (Parser, Result<(), ParseError>) {
         let mut lexer = Lexer::new(input);
         lexer.lex().unwrap();
         let mut parser = Parser::new(lexer.tokens);
-        parser.parse_expression().unwrap();
-        parser
+        let r = parser.parse_expression();
+        (parser, r)
     }
 
     #[test]
     fn test_simple_number() {
-        assert_eq!(parse_str("123").seg.pop(), Value::Num(123.))
+        let (mut p, e) = parse_str("123");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(123.))
     }
 
     #[test]
     fn test_simple_string() {
-        assert_eq!(
-            parse_str("\"hello\"").seg.pop(),
-            Value::String("hello".into())
-        );
+        let (mut p, e) = parse_str("\"hello\"");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::String("hello".into()));
     }
 
     #[test]
     fn test_boolean_true() {
-        assert_eq!(parse_str("true").seg.pop(), Value::Boolean(true));
+        let (mut p, e) = parse_str("true");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Boolean(true));
     }
 
     #[test]
@@ -700,7 +705,9 @@ mod tests {
 
     #[test]
     fn test_boolean_false() {
-        assert_eq!(parse_str("false").seg.pop(), Value::Boolean(false));
+        let (mut p, e) = parse_str("false");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Boolean(false));
     }
 
     // #[test]
@@ -718,7 +725,9 @@ mod tests {
 
     #[test]
     fn test_parenthesized_expression() {
-        assert_eq!(parse_str("(123)").seg.pop(), Value::Num(123.));
+        let (mut p, e) = parse_str("(123)");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(123.));
     }
 
     // #[test]
@@ -757,15 +766,16 @@ mod tests {
 
     #[test]
     fn test_function_call_one_arg() {
-        assert_eq!(parse_str("neg(5)").seg.pop(), Value::Num(-5.))
+        let (mut p, e) = parse_str("neg(5)");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(-5.))
     }
 
     #[test]
     fn test_function_call_multiple_args() {
-        assert_eq!(
-            parse_str("add(\"This is a \", \"test\")").seg.pop(),
-            Value::String("This is a test".into())
-        );
+        let (mut p, e) = parse_str("add(\"This is a \", \"test\")");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::String("This is a test".into()));
     }
 
     // #[test]
@@ -793,21 +803,24 @@ mod tests {
 
     #[test]
     fn test_empty_array_literal() {
-        assert_eq!(parse_str("[]").seg.pop(), Value::Vec(vec![]));
+        let (mut p, e) = parse_str("[]");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Vec(vec![]));
     }
 
     #[test]
     fn test_array_literal_one_element() {
-        assert_eq!(
-            parse_str("[123]").seg.pop(),
-            Value::Vec(vec![Value::Num(123.)])
-        );
+        let (mut p, e) = parse_str("[123]");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Vec(vec![Value::Num(123.)]));
     }
 
     #[test]
     fn test_array_literal_multiple_elements() {
+        let (mut p, e) = parse_str("[1, \"two\"]");
+        assert!(e.is_ok());
         assert_eq!(
-            parse_str("[1, \"two\"]").seg.pop(),
+            p.seg.pop(),
             Value::Vec(vec![Value::Num(1.), Value::String("two".into())])
         );
     }
@@ -830,8 +843,10 @@ mod tests {
 
     #[test]
     fn test_dictionary_literal_multiple_members() {
+        let (mut p, e) = parse_str("{a: 1, b: true}");
+        assert!(e.is_ok());
         assert_eq!(
-            parse_str("{a: 1, b: true}").seg.pop(),
+            p.seg.pop(),
             Value::Dict(HashMap::from([
                 ("a".into(), Value::Num(1.)),
                 ("b".into(), Value::Boolean(true))
@@ -841,25 +856,191 @@ mod tests {
 
     #[test]
     fn test_addition() {
-        let mut p = parse_str("1 + 2");
+        let (mut p, e) = parse_str("1 + 2");
+        assert!(e.is_ok());
         println!("{:?}", p.seg.stack);
         assert_eq!(p.seg.pop(), Value::Num(3.));
     }
 
     #[test]
     fn test_ternary_operator() {
-        assert_eq!(parse_str("true ? 1 : 2").seg.pop(), Value::Num(1.));
+        let (mut p, e) = parse_str("true ? 1 : 2");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(1.));
     }
 
     #[test]
     fn test_unary_minus() {
-        assert_eq!(parse_str("-5").seg.pop(), Value::Num(-5.));
+        let (mut p, e) = parse_str("-5");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(-5.));
     }
 
     #[test]
     fn test_unary_not() {
-        assert_eq!(parse_str("!true").seg.pop(), Value::Boolean(false));
+        let (mut p, e) = parse_str("!true");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Boolean(false));
     }
+
+    //TODO: why should this be an error in a stack based language
+    // #[test]
+    // fn test_incomplete_expression() {
+    //     let (mut p, e) = parse_str("10 + 25 25");
+    //     assert!(e.is_err());
+    //     println!("{e:?}");
+    //     // assert_eq!(
+    //     //     e,
+    //     //     vec![Value::String(
+    //     //         "compile_error ! (\"Unexpected token\")".into()
+    //     //     )]
+    //     // );
+    // }
+
+    #[test]
+    fn test_arithmetic_expression() {
+        let (mut p, e) = parse_str("10 + 20 * 30");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(610.));
+    }
+
+    #[test]
+    fn test_parenthesized_expression_2() {
+        let (mut p, e) = parse_str("(10 + 20) * 30");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(900.))
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let (mut p, e) = parse_str("10 + 20 * (30 - 5) / 2");
+        assert!(e.is_ok());
+        assert_eq!(p.seg.pop(), Value::Num(260.))
+    }
+
+    // TODO: how are we resolving all of these
+    // #[test]
+    // fn test_logical_expression() {
+    //     let mut p = parse_str("a && b || c");
+    //     assert!(true);
+    // }
+    //
+    // #[test]
+    // fn test_comparison_expression() {
+    //     let input = TokenStream::from_str("a == b && c > d").unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //     assert!(parser.is_expression());
+    // }
+    //
+    // #[test]
+    // fn test_bitwise_expression() {
+    //     let input = TokenStream::from_str("a | b & c ^ d").unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //     assert!(parser.is_expression());
+    // }
+    //
+    // #[test]
+    // fn test_shift_expression() {
+    //     let input = TokenStream::from_str("a << 2 + b >> 1").unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //     assert!(parser.is_expression());
+    // }
+    //
+    // #[test]
+    // fn test_unary_expression() {
+    //     let input = TokenStream::from_str("-a + !b").unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //     assert!(parser.is_expression());
+    // }
+    //
+    // #[test]
+    // fn test_chained_unary_expression() {
+    //     let input = TokenStream::from_str("!!a + --b").unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //     assert!(parser.is_expression());
+    // }
+
+    #[test]
+    fn test_invalid_expression() {
+        let (mut p, e) = parse_str("+");
+        assert!(e.is_err());
+        assert_eq!(
+            e.unwrap_err(),
+            ParseError::UnexpectedToken {
+                expected: Some("primary expression type (@, literal, [, {, identifier, (".into()),
+                found: Token::Eof,
+                line: 1,
+                column: 2
+            }
+        );
+    }
+
+    // #[test]
+    // fn test_error_formatting() {
+    //     let source = "10 + 20 30"; // Missing operator between 20 and 30
+    //     let input = TokenStream::from_str(source).unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //
+    //     // This should fail parsing
+    //     assert!(!parser.is_expression());
+    //
+    //     // Test error message extraction
+    //     let error_msg = parser.extract_error_message();
+    //     assert!(error_msg.is_some());
+    //     assert_eq!(error_msg.unwrap(), "Unexpected token");
+    //
+    //     // Test error formatting
+    //     let formatted_error = parser.format_error(source, "test.cel", 1u32);
+    //     assert!(formatted_error.is_some());
+    //
+    //     let formatted = formatted_error.unwrap();
+    //     assert!(formatted.contains("error: Unexpected token"));
+    //     assert!(formatted.contains("test.cel:1:")); // Should include line number
+    //     assert!(formatted.contains("1 | 10 + 20 30")); // Should show the line with line number
+    //     assert!(formatted.contains("^")); // Should have carets pointing to the error
+    // }
+
+    // #[test]
+    // fn test_error_formatting_with_line_offset() {
+    //     let source = "a + b c"; // Missing operator between b and c
+    //     let input = TokenStream::from_str(source).unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //
+    //     // This should fail parsing
+    //     assert!(!parser.is_expression());
+    //
+    //     // Test error formatting with line offset (as if expression starts at line 42)
+    //     let formatted_error = parser.format_error(source, "large_file.rs", 42u32);
+    //     assert!(formatted_error.is_some());
+    //
+    //     let formatted = formatted_error.unwrap();
+    //     assert!(formatted.contains("error: Unexpected token"));
+    //     assert!(formatted.contains("large_file.rs:42:")); // Should show offset line number
+    //     assert!(formatted.contains("42 | a + b c")); // Should show the line with offset line number
+    //     assert!(formatted.contains("^")); // Should have carets pointing to the error
+    // }
+
+    // #[test]
+    // fn print_error_formatting() {
+    //     let line = line!() + 1;
+    //     let source = r#"
+    //         10 + 20 30 // Unexpected token
+    //     "#;
+    //     let input = TokenStream::from_str(source).unwrap();
+    //     let mut parser = CELParser::new(input.into_iter());
+    //
+    //     if !parser.is_expression() {
+    //         // Format error starting at line 1
+    //         if let Some(formatted_error) = parser.format_error(source, file!(), line) {
+    //             println!("{}", formatted_error);
+    //             // error: Unexpected token
+    //             // --> cel-parser/src/lib.rs:593:21
+    //             //     |
+    //             // 593 |             10 + 20 30 // Unexpected token
+    //             //     |                     ^^
+    //         }
+    //     }
+    // }
 
     // #[test]
     // fn test_postfix_array_access() {
