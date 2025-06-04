@@ -7,6 +7,7 @@ mod eve_evaluate;
 mod eve_parser;
 mod expression_parser;
 mod lexer;
+mod stack;
 
 // use eve::{EvaluateOptions, Eve, LayoutAttributes, PlaceData, Placeable, SliceSelect};
 // use eve_evaluate::{Dictionary, Sheet, SheetRelation, Value, VirtualMachine};

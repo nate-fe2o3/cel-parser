@@ -7,3 +7,4 @@ pub mod eve_evaluate;
 pub mod eve_parser;
 pub mod expression_parser;
 pub mod lexer;
+pub mod stack;

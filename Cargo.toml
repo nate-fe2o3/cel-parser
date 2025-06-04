@@ -1,5 +1,5 @@
 [package]
-name = "cel-parser"
+name = "cel-paarser"
 version = "0.1.0"
 edition = "2024"
 

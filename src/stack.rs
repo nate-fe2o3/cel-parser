@@ -1,161 +1,103 @@
-use std::{collections::HashMap, default, mem::Discriminant};
+use std::{any::TypeId, collections::HashMap, default, mem::Discriminant};
 
-#[derive(Debug)]
-enum Value {
-    Num(f64),
-    String(String),
-}
+use cel_rs::{DynSegment, IntoList};
 
-impl From<f64> for Value {
-    fn from(value: f64) -> Self {
-        Value::Num(value)
-    }
-}
-
-impl From<String> for Value {
-    fn from(value: String) -> Self {
-        Value::String(value)
-    }
-}
-
-impl TryFrom<Value> for f64 {
-    type Error = Value;
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Num(x) => Ok(x),
-            val => Err(val),
-        }
-    }
-}
-
-impl TryFrom<Value> for String {
-    type Error = Value;
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::String(x) => Ok(x),
-            val => Err(val),
-        }
-    }
-}
-
-macro_rules! unary_fn {
-    (
-        $name:ident,
-        $(($aty:ident, |$a:ident| $body:expr)),* $(,)?
-    ) => {
-        fn $name(a: Value) -> Value {
-            match a {
-                $(Value::$aty($a) => $body.into(),)*
-                a => panic!("{a:?} is invalid for {}", stringify!($name))
-            }
-        }
-    };
-}
-
-macro_rules! binary_fn {
-    (
-        $name:ident,
-        $(($aty:ident, $bty:ident, |$a:ident, $b:ident| $body:expr)),* $(,)?
-    ) => {
-        fn $name(a: Value, b: Value) -> Value {
-            match (a, b) {
-                $((Value::$aty($a), Value::$bty($b)) => $body.into(),)*
-                (a, b) => panic!("{a:?} and {b:?} are invalid for {}", stringify!($name))
-            }
-        }
-    };
-}
-
-macro_rules! ternary_fn {
-    (
-        $name:ident,
-        $(($aty:ident, $bty:ident, $cty:ident, |$a:ident, $b:ident, $c:ident| $body:expr)),* $(,)?
-    ) => {
-        fn $name(a: Value, b: Value, c: Value) -> Value {
-            match (a, b, c) {
-                $((Value::$aty($a), Value::$bty($b), Value::$cty($c)) => $body.into(),)*
-                (a, b, c) => panic!("{a:?} and {b:?} and {c:?} are invalid for {}", stringify!($name))
-            }
-        }
-    };
-}
-
-unary_fn!(neg, (Num, |a| -a));
-
-binary_fn!(
-    add,
-    (Num, Num, |a, b| a + b),
-    (String, String, |a, b| format!("{a}{b}")),
-    (Num, String, |a, b| a + b.parse::<f64>().unwrap()),
-);
-ternary_fn!(add3, (Num, Num, Num, |a, b, c| a + b + c));
-
-binary_fn!(mul, (Num, Num, |a, b| a * b));
-
-type Stack = Vec<Value>;
-// type Words = HashMap<(String, usize), Box<dyn Fn(&mut Stack)>>;
-type UnaryMap = HashMap<String, fn(Value) -> Value>;
-type BinaryMap = HashMap<String, fn(Value, Value) -> Value>;
-type TernaryMap = HashMap<String, fn(Value, Value, Value) -> Value>;
+type NonaryMap<T: 'static> = HashMap<String, fn() -> T>;
+type UnaryMap<T: 'static, U: 'static> = HashMap<String, fn(T) -> U>;
+type BinaryMap<T: 'static, U: 'static, V: 'static> = HashMap<String, fn(T, U) -> V>;
+type OldParentMap = HashMap<(TypeId, u8), DynMap>;
+type OldDynMap = HashMap<&'static str, Box<dyn Fn()>>;
+type ParentMap = HashMap<((Option<TypeId>, u8), TypeId), DynMap>;
+type DynMap = HashMap<&'static str, Box<dyn FunctionMappable>>;
+// type DynMap = HashMap<&'static str, &'static dyn FunctionMappable>;
 
 #[derive(Default)]
-struct Seg {
-    stack: Stack,
-    un: UnaryMap,
-    bi: BinaryMap,
-    tern: TernaryMap,
-}
+pub struct FnStack(ParentMap);
 
-impl Seg {
-    fn new(stack: Vec<Value>) -> Self {
+trait FunctionMappable {}
+
+impl<T> FunctionMappable for fn() -> T {}
+impl<T, U> FunctionMappable for fn(T) -> U {}
+impl<T, U, V> FunctionMappable for fn(T, U) -> V {}
+impl<T, U, V, W> FunctionMappable for fn(T, U, V) -> W {}
+
+impl FnStack {
+    pub fn new() -> Self {
         Self {
-            stack,
             ..Default::default()
         }
     }
-    fn register1(&mut self, name: impl Into<String>, f: fn(Value) -> Value) {
-        self.un.insert(name.into(), f);
+    pub fn register0<T: 'static>(&mut self, name: &'static str, f: fn() -> T) {
+        let inner_dyn_map = self
+            .0
+            .entry(((None, 0), TypeId::of::<T>()))
+            .or_insert(HashMap::new());
+        inner_dyn_map.insert(name, Box::new(f));
+    }
+    pub fn register1<T: 'static, U: 'static>(&mut self, name: &'static str, f: fn(T) -> U) {
+        let inner_dyn_map = self
+            .0
+            .entry(((Some(TypeId::of::<T>()), 1), TypeId::of::<U>()))
+            .or_insert(HashMap::new());
+        inner_dyn_map.insert(name, Box::new(f));
+    }
+    pub fn register2<T: 'static, U: 'static, V: 'static>(
+        &mut self,
+        name: &'static str,
+        f: fn(T, U) -> V,
+    ) {
+        let inner_dyn_map = self
+            .0
+            .entry(((Some(TypeId::of::<(T, U)>()), 2), TypeId::of::<V>()))
+            .or_insert(HashMap::new());
+        inner_dyn_map.insert(name, Box::new(f));
+    }
+    pub fn register3<T: 'static, U: 'static, V: 'static, W: 'static>(
+        &mut self,
+        name: &'static str,
+        f: fn(T, U, V) -> W,
+    ) {
+        let inner_dyn_map = self
+            .0
+            .entry(((Some(TypeId::of::<(T, U, V)>()), 3), TypeId::of::<W>()))
+            .or_insert(HashMap::new());
+        inner_dyn_map.insert(name, Box::new(f));
     }
 
-    fn register2(&mut self, name: impl Into<String>, f: fn(Value, Value) -> Value) {
-        self.bi.insert(name.into(), f);
+    pub fn callfn(&mut self, name: &'static str, args: u8, stack: DynSegment) {
+        let [p0] = stack.get_last_n_padded::<1>();
+        stack.pop_types::<(T, ())>()?;
+        self.segment.push_op1(op, p0);
+        self.push_type::<R>();
+        Ok(())
+        let ty = stack.po
+        self.0.get()
     }
-    fn register3(&mut self, name: impl Into<String>, f: fn(Value, Value, Value) -> Value) {
-        self.tern.insert(name.into(), f);
+
+    fn setup(&mut self) {
+        let ty = TypeId::of::<(f64, f64, f64)>();
+        self.register(
+            "testFn",
+            ty,
+            2,
+            Box::new(|x: f64, y: f64| (x / y) * (x + y)),
+        );
     }
-    fn callfn(&mut self, name: String, args: u8) {
-        println!("in callfn. name: {name}, args: {args}");
-        match args {
-            1 => {
-                let f = *self.un.get(&name).unwrap();
-                self.op1(f);
-            }
-            2 => {
-                let f = *self.bi.get(&name).unwrap();
-                self.op2(f);
-            }
-            3 => {
-                let f = *self.tern.get(&name).unwrap();
-                self.op3(f);
-            }
-            _ => panic!(),
-        }
-    }
-    fn op1(&mut self, f: fn(Value) -> Value) {
-        let x = self.stack.pop().unwrap();
-        self.stack.push(f(x));
-    }
-    fn op2(&mut self, f: fn(Value, Value) -> Value) {
-        let y = self.stack.pop().unwrap();
-        let x = self.stack.pop().unwrap();
-        self.stack.push(f(x, y));
-    }
-    fn op3(&mut self, f: fn(Value, Value, Value) -> Value) {
-        let z = self.stack.pop().unwrap();
-        let y = self.stack.pop().unwrap();
-        let x = self.stack.pop().unwrap();
-        self.stack.push(f(x, y, z));
-    }
+    // fn op1(&mut self, f: fn(Value) -> Value) {
+    //     let x = self.stack.pop().unwrap();
+    //     self.stack.push(f(x));
+    // }
+    // fn op2(&mut self, f: fn(Value, Value) -> Value) {
+    //     let y = self.stack.pop().unwrap();
+    //     let x = self.stack.pop().unwrap();
+    //     //         self.stack.push(f(x, y));
+    //     //     }
+    //     //     fn op3(&mut self, f: fn(Value, Value, Value) -> Value) {
+    //     //         let z = self.stack.pop().unwrap();
+    //     //         let y = self.stack.pop().unwrap();
+    //     //         let x = self.stack.pop().unwrap();
+    //     //         self.stack.push(f(x, y, z));
+    // }
 }
 
 // fn register1(words: &mut Words, name: impl Into<String>, f: impl Fn(Value) -> Value + 'static) {
@@ -197,31 +139,40 @@ impl Seg {
 //     );
 // }
 
+fn test_fn(x: f64, y: f64) -> String {
+    format!("{}", x + y)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test() {
-        let mut stack: Stack = vec![1.0.into(), 2.0.into(), 7.0.into()];
-        let program = vec![("add".to_string(), 3)];
-        let mut fns = Seg::new(stack);
-        //container struct with helper functions
-        fns.register1("neg", neg);
-        fns.register2("add", add);
-        fns.register3("add", add3);
-        fns.register2("mul", mul);
-
-        for (word, args) in program {
-            // let f = &words[&word];
-            fns.callfn(word, args);
-        }
-        fns.op1(|x| {
-            let t: f64 = x.try_into().unwrap();
-            Value::from(-t)
-        });
-        println!("stack: {:?}", fns.stack);
-        // assert_eq!(fns.stack[0].try_into().unwrap(), 10.0);
-        assert_eq!(1, 2)
+        let mut thing = FnStack::new();
+        thing.register2("testFn", test_fn);
     }
+    // #[test]
+    // fn test() {
+    //     let mut stack: Stack = vec![1.0.into(), 2.0.into(), 7.0.into()];
+    //     let program = vec![("add".to_string(), 3)];
+    //     let mut fns = Seg::new(stack);
+    //     //container struct with helper functions
+    //     fns.register1("neg", neg);
+    //     fns.register2("add", add);
+    //     fns.register3("add", add3);
+    //     fns.register2("mul", mul);
+    //
+    //     for (word, args) in program {
+    //         // let f = &words[&word];
+    //         fns.callfn(word, args);
+    //     }
+    //     fns.op1(|x| {
+    //         let t: f64 = x.try_into().unwrap();
+    //         Value::from(-t)
+    //     });
+    //     println!("stack: {:?}", fns.stack);
+    //     // assert_eq!(fns.stack[0].try_into().unwrap(), 10.0);
+    //     assert_eq!(1, 2)
+    // }
 }
