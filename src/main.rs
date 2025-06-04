@@ -1,12 +1,17 @@
 mod adam;
 mod adam_evaluate;
 mod adam_parser;
-mod dsep;
 mod eve;
 mod eve_evaluate;
 mod eve_parser;
 mod expression_parser;
 mod lexer;
+mod single_cel;
+mod stack;
+
+fn main() {
+    println!("Hello World");
+}
 
 // use eve::{EvaluateOptions, Eve, LayoutAttributes, PlaceData, Placeable, SliceSelect};
 // use eve_evaluate::{Dictionary, Sheet, SheetRelation, Value, VirtualMachine};

@@ -1,9 +1,12 @@
 use std::{collections::HashMap, default, mem::Discriminant};
 
-#[derive(Debug)]
-enum Value {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
     Num(f64),
     String(String),
+    Boolean(bool),
+    Vec(Vec<Value>),
+    Dict(HashMap<String, Value>),
 }
 
 impl From<f64> for Value {
@@ -12,9 +15,25 @@ impl From<f64> for Value {
     }
 }
 
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Value::Boolean(value)
+    }
+}
+
 impl From<String> for Value {
     fn from(value: String) -> Self {
         Value::String(value)
+    }
+}
+impl From<Vec<Value>> for Value {
+    fn from(value: Vec<Value>) -> Self {
+        Value::Vec(value)
+    }
+}
+impl From<HashMap<String, Value>> for Value {
+    fn from(value: HashMap<String, Value>) -> Self {
+        Value::Dict(value)
     }
 }
 
@@ -28,11 +47,40 @@ impl TryFrom<Value> for f64 {
     }
 }
 
+impl TryFrom<Value> for bool {
+    type Error = Value;
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Boolean(x) => Ok(x),
+            val => Err(val),
+        }
+    }
+}
+
 impl TryFrom<Value> for String {
     type Error = Value;
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
             Value::String(x) => Ok(x),
+            val => Err(val),
+        }
+    }
+}
+
+impl TryFrom<Value> for Vec<Value> {
+    type Error = Value;
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Vec(x) => Ok(x),
+            val => Err(val),
+        }
+    }
+}
+impl TryFrom<Value> for HashMap<String, Value> {
+    type Error = Value;
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Dict(x) => Ok(x),
             val => Err(val),
         }
     }
@@ -80,52 +128,80 @@ macro_rules! ternary_fn {
     };
 }
 
-unary_fn!(neg, (Num, |a| -a));
-
-binary_fn!(
-    add,
-    (Num, Num, |a, b| a + b),
-    (String, String, |a, b| format!("{a}{b}")),
-    (Num, String, |a, b| a + b.parse::<f64>().unwrap()),
-);
-ternary_fn!(add3, (Num, Num, Num, |a, b, c| a + b + c));
-
-binary_fn!(mul, (Num, Num, |a, b| a * b));
-
 type Stack = Vec<Value>;
 // type Words = HashMap<(String, usize), Box<dyn Fn(&mut Stack)>>;
+type NonaryMap = HashMap<String, fn() -> Value>;
 type UnaryMap = HashMap<String, fn(Value) -> Value>;
 type BinaryMap = HashMap<String, fn(Value, Value) -> Value>;
 type TernaryMap = HashMap<String, fn(Value, Value, Value) -> Value>;
 
 #[derive(Default)]
-struct Seg {
-    stack: Stack,
-    un: UnaryMap,
-    bi: BinaryMap,
-    tern: TernaryMap,
+pub struct Seg {
+    pub stack: Stack,
+    pub non: NonaryMap,
+    pub un: UnaryMap,
+    pub bi: BinaryMap,
+    pub tern: TernaryMap,
 }
 
 impl Seg {
-    fn new(stack: Vec<Value>) -> Self {
-        Self {
+    pub fn new(stack: Vec<Value>) -> Self {
+        let mut s = Self {
             stack,
             ..Default::default()
-        }
+        };
+        s.register();
+        s
     }
-    fn register1(&mut self, name: impl Into<String>, f: fn(Value) -> Value) {
+    pub fn register(&mut self) {
+        self.register1("not", not);
+        self.register1("neg", neg);
+
+        self.register2("add", add);
+        self.register2("mul", mul);
+        self.register2("sub", sub);
+        self.register2("div", div);
+        self.register2("mod", modd);
+
+        self.register2("lt", lt);
+        self.register2("lte", lte);
+
+        self.register2("gt", gt);
+        self.register2("gte", gte);
+
+        self.register2("eq", eq);
+        self.register2("neq", neq);
+
+        self.register2("and", and);
+        self.register2("or", or);
+    }
+    pub fn push(&mut self, x: Value) {
+        self.stack.push(x);
+    }
+
+    pub fn pop(&mut self) -> Value {
+        self.stack.pop().unwrap()
+    }
+    pub fn register0(&mut self, name: impl Into<String>, f: fn() -> Value) {
+        self.non.insert(name.into(), f);
+    }
+    pub fn register1(&mut self, name: impl Into<String>, f: fn(Value) -> Value) {
         self.un.insert(name.into(), f);
     }
 
-    fn register2(&mut self, name: impl Into<String>, f: fn(Value, Value) -> Value) {
+    pub fn register2(&mut self, name: impl Into<String>, f: fn(Value, Value) -> Value) {
         self.bi.insert(name.into(), f);
     }
-    fn register3(&mut self, name: impl Into<String>, f: fn(Value, Value, Value) -> Value) {
+    pub fn register3(&mut self, name: impl Into<String>, f: fn(Value, Value, Value) -> Value) {
         self.tern.insert(name.into(), f);
     }
-    fn callfn(&mut self, name: String, args: u8) {
+    pub fn callfn(&mut self, name: String, args: u8) {
         println!("in callfn. name: {name}, args: {args}");
         match args {
+            0 => {
+                let f = *self.non.get(&name).unwrap();
+                self.op0(f);
+            }
             1 => {
                 let f = *self.un.get(&name).unwrap();
                 self.op1(f);
@@ -141,16 +217,19 @@ impl Seg {
             _ => panic!(),
         }
     }
-    fn op1(&mut self, f: fn(Value) -> Value) {
+    pub fn op0(&mut self, f: fn() -> Value) {
+        self.stack.push(f());
+    }
+    pub fn op1(&mut self, f: fn(Value) -> Value) {
         let x = self.stack.pop().unwrap();
         self.stack.push(f(x));
     }
-    fn op2(&mut self, f: fn(Value, Value) -> Value) {
+    pub fn op2(&mut self, f: fn(Value, Value) -> Value) {
         let y = self.stack.pop().unwrap();
         let x = self.stack.pop().unwrap();
         self.stack.push(f(x, y));
     }
-    fn op3(&mut self, f: fn(Value, Value, Value) -> Value) {
+    pub fn op3(&mut self, f: fn(Value, Value, Value) -> Value) {
         let z = self.stack.pop().unwrap();
         let y = self.stack.pop().unwrap();
         let x = self.stack.pop().unwrap();
@@ -158,62 +237,59 @@ impl Seg {
     }
 }
 
-// fn register1(words: &mut Words, name: impl Into<String>, f: impl Fn(Value) -> Value + 'static) {
-//     words.insert(
-//         (name.into(), 1),
-//         Box::new(move |stack: &mut Stack| {
-//             let a = stack.pop().unwrap();
-//             stack.push(f(a));
-//         }),
-//     );
-// }
-// fn register2(
-//     words: &mut Words,
-//     name: impl Into<String>,
-//     f: impl Fn(Value, Value) -> Value + 'static,
-// ) {
-//     words.insert(
-//         (name.into(), 2),
-//         Box::new(move |stack: &mut Stack| {
-//             let a = stack.pop().unwrap();
-//             let b = stack.pop().unwrap();
-//             stack.push(f(a, b));
-//         }),
-//     );
-// }
-// fn register3(
-//     words: &mut Words,
-//     name: impl Into<String>,
-//     f: impl Fn(Value, Value, Value) -> Value + 'static,
-// ) {
-//     words.insert(
-//         (name.into(), 3),
-//         Box::new(move |stack: &mut Stack| {
-//             let a = stack.pop().unwrap();
-//             let b = stack.pop().unwrap();
-//             let c = stack.pop().unwrap();
-//             stack.push(f(a, b, c));
-//         }),
-//     );
-// }
+// BUILTIN FUNCTIONS
+
+unary_fn!(neg, (Num, |a| -a));
+unary_fn!(not, (Boolean, |a| !a));
+
+binary_fn!(
+    add,
+    (Num, Num, |a, b| a + b),
+    (String, String, |a, b| format!("{a}{b}")),
+    (Num, String, |a, b| a + b.parse::<f64>().unwrap()),
+    (String, Num, |a, b| b + a.parse::<f64>().unwrap()),
+);
+
+binary_fn!(mul, (Num, Num, |a, b| a * b));
+binary_fn!(sub, (Num, Num, |a, b| a - b));
+binary_fn!(div, (Num, Num, |a, b| a / b));
+binary_fn!(modd, (Num, Num, |a, b| a % b));
+binary_fn!(lt, (Num, Num, |a, b| a < b));
+binary_fn!(lte, (Num, Num, |a, b| a <= b));
+binary_fn!(gt, (Num, Num, |a, b| a > b));
+binary_fn!(gte, (Num, Num, |a, b| a >= b));
+binary_fn!(or, (Boolean, Boolean, |a, b| a || b));
+binary_fn!(and, (Boolean, Boolean, |a, b| a && b));
+// f64 issues
+// binary_fn!(bitand, (Num, Num, |a, b| a & b));
+// unary_fn!(bitnot, (Num |a | !a));
+// binary_fn!(bitor, (Num, Num, |a, b| a ` b));
+// binary_fn!(bitxor, (Num, Num, |a, b| a ^ b));
+// binary_fn!(lshift, (Num, Num, |a, b| a << b));
+// binary_fn!(rshift, (Num, Num, |a, b| a >> b));
+binary_fn!(
+    eq,
+    (Num, Num, |a, b| a == b),
+    (String, String, |a, b| a == b),
+    (Boolean, Boolean, |a, b| a == b),
+);
+binary_fn!(
+    neq,
+    (Num, Num, |a, b| a != b),
+    (String, String, |a, b| a != b),
+    (Boolean, Boolean, |a, b| a != b),
+);
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test() {
+    fn test_basic() {
         let mut stack: Stack = vec![1.0.into(), 2.0.into(), 7.0.into()];
-        let program = vec![("add".to_string(), 3)];
+        let program = vec![("add".to_string(), 2), ("add".to_string(), 2)];
         let mut fns = Seg::new(stack);
-        //container struct with helper functions
-        fns.register1("neg", neg);
-        fns.register2("add", add);
-        fns.register3("add", add3);
-        fns.register2("mul", mul);
-
         for (word, args) in program {
-            // let f = &words[&word];
             fns.callfn(word, args);
         }
         fns.op1(|x| {
@@ -221,7 +297,8 @@ mod tests {
             Value::from(-t)
         });
         println!("stack: {:?}", fns.stack);
-        // assert_eq!(fns.stack[0].try_into().unwrap(), 10.0);
-        assert_eq!(1, 2)
+        let thing: f64 = fns.stack[0].clone().try_into().unwrap();
+        assert_eq!(thing, -10.);
+        // assert_eq!(1, 2)
     }
 }

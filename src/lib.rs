@@ -1,9 +1,10 @@
 pub mod adam;
 pub mod adam_evaluate;
 pub mod adam_parser;
-pub mod dsep;
 pub mod eve;
 pub mod eve_evaluate;
 pub mod eve_parser;
 pub mod expression_parser;
 pub mod lexer;
+pub mod single_cel;
+pub mod stack;

@@ -344,20 +344,20 @@ pub enum Token {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct TokenSpan {
+pub struct TokenSpan {
     pub value: Token,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Span {
+pub struct Span {
     pub line: usize,
     pub column: usize,
 }
 
 // Lexer Errors
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum LexError {
+pub enum LexError {
     UnexpectedChar {
         expected: char, // Can be a specific token or a description like "expression"
         found: char,
