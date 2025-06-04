@@ -164,7 +164,7 @@ impl Parser {
         self.parse_bitwise_or_expression()?;
         while self.match_token(Token::And)? {
             self.parse_bitwise_or_expression()?;
-            self.seg.callfn("bitand".into(), 2);
+            self.seg.callfn("and".into(), 2);
         }
         Ok(())
     }
@@ -272,12 +272,12 @@ impl Parser {
                 Token::LeftShift => {
                     self.next()?;
                     self.parse_additive_expression()?;
-                    //do stuff
+                    self.seg.callfn("lshift".into(), 2);
                 }
                 Token::RightShift => {
                     self.next()?;
                     self.parse_additive_expression()?;
-                    // do stuff
+                    self.seg.callfn("rshift".into(), 2);
                 }
                 _ => {
                     break;
